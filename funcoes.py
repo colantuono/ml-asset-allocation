@@ -39,7 +39,7 @@ def compound(r):
     """
     return np.expm1(np.log1p(r).sum())
                          
-def annualize_rets(r, periods_per_year):
+def annualize_rets(r, periods_per_year=12):
     """
     Annualizes a set of returns
     We should infer the periods per year
@@ -51,7 +51,7 @@ def annualize_rets(r, periods_per_year):
     return compounded_growth**(periods_per_year/n_periods)-1
 
 
-def annualize_vol(r, periods_per_year):
+def annualize_vol(r, periods_per_year=12):
     """
     Annualizes the vol of a set of returns
     We should infer the periods per year
@@ -61,7 +61,7 @@ def annualize_vol(r, periods_per_year):
     return r.std()*(periods_per_year**0.5)
 
 
-def sharpe_ratio(r, riskfree_rate, periods_per_year):
+def sharpe_ratio(r, riskfree_rate=0.03, periods_per_year=12):
     """
     Computes the annualized sharpe ratio of a set of returns
     """
@@ -422,6 +422,7 @@ def pipeline(df: pd.DataFrame, training_period: int, oos_period: int, algo: str,
     for i, month in enumerate(df.index):
         if df[(i+training_period) : (i+training_period+oos_period)].shape[0] > oos_period-1:
             train_df = df[(i) : (i+training_period)].dropna(axis='columns')
+            train_df = train_df.pct_change().dropna(axis='rows')
             ## DANGER OF DATA LEAKAGE
             oos_df = df[(i+training_period) : (i+training_period+oos_period)][train_df.columns].pct_change((oos_period-1)).dropna() 
             
