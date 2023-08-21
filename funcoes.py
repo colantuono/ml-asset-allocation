@@ -420,6 +420,7 @@ def pipeline(df: pd.DataFrame, training_period: int, oos_period: int, algo: str,
     oos_period = oos_period+1
     retornos = pd.DataFrame()
     for i, month in enumerate(df.index):
+        df = df.dropna(axis='columns')
         if df[(i+training_period) : (i+training_period+oos_period)].shape[0] > oos_period-1:
             train_df = df[(i) : (i+training_period)].dropna(axis='columns')
             train_df = train_df.pct_change().dropna(axis='rows')
@@ -428,8 +429,9 @@ def pipeline(df: pd.DataFrame, training_period: int, oos_period: int, algo: str,
             
             pesos_algo = algo(train_df)
             pesos_df = pd.DataFrame(data={'pesos':pesos_algo}, index=train_df.columns).sort_values(by='pesos', ascending=False).T
+    
             
-            stock_rets = []
+            stock_rets = []  
             retorno_mes = []
             for n, date in enumerate(oos_df.index):
                 for stock in oos_df.columns:
