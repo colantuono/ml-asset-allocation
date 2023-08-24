@@ -187,7 +187,6 @@ def sortino_ratio(returns, riskfree_rate, target_return=0, periods_per_year=12):
     sortino_ratio = (average_return - riskfree_rate) / downside_deviation
     return sortino_ratio
 
-
 def summary_stats(r, riskfree_rate=0.03, precision=5):
     """
     Return a DataFrame that contains aggregated summary stats for the returns in the columns of r
@@ -258,7 +257,6 @@ def gmv(cov):
     n = cov.shape[0]
     return msr(0, np.repeat(1, n), cov)
 
-
 def portfolio_tracking_error(weights, ref_r, bb_r):
     """
     returns the tracking error between the reference returns
@@ -322,6 +320,36 @@ def weight_gmv(r, cov_estimator=sample_cov, **kwargs):
     est_cov = cov_estimator(r, **kwargs)
     return gmv(est_cov)
 
+def msr_weights(returns):
+     # Risk-free rate
+
+    mean_returns = annualize_rets(returns)
+    cov_matrix = returns.cov()
+
+    num_assets = len(mean_returns)
+    initial_weights = np.ones(num_assets) / num_assets  # Equal weights to start with
+
+    def negative_sharpe(weights):
+        port_return = np.sum(mean_returns * weights)
+        port_stddev = np.sqrt(np.dot(weights.T, np.dot(cov_matrix, weights)))
+        sharpe_ratio = (port_return ) / port_stddev
+        return -sharpe_ratio
+
+    constraints = (
+        {"type": "eq", "fun": lambda weights: np.sum(weights) - 1}  # Sum of weights = 1
+    )
+
+    bounds = tuple((0, .20) for asset in range(num_assets))  # Each weight between 0 and 0.20 (20%)
+
+    optimal_weights = minimize(
+        negative_sharpe,
+        initial_weights,
+        method="SLSQP",
+        bounds=bounds,
+        constraints=constraints
+    ).x
+
+    return optimal_weights
 
 def cc_cov(r, **kwargs):
     """
