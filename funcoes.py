@@ -436,8 +436,8 @@ def msr_weights(returns, cov_estimator=sample_cov):
 
     return optimal_weights
 
-
-def weight_pca(df, cov_estimator=f.sample_cov, **kwargs):
+from sklearn.decomposition import PCA
+def weight_pca(df, cov_estimator=sample_cov, **kwargs):
     rets = (df - df.mean()) / df.std()
     cov_matrix = cov_estimator(rets)
         
@@ -447,18 +447,18 @@ def weight_pca(df, cov_estimator=f.sample_cov, **kwargs):
     pca_comp = pca_fitted.components_;
     pc_w = pca_comp/ pca_comp.sum()
     
-    stats = f.summary_stats(pd.DataFrame(pc_w),0).sort_values('Sharpe Ratio', ascending=False)
+    stats = summary_stats(pd.DataFrame(pc_w),0).sort_values('Sharpe Ratio', ascending=False)
     max_port = stats.index[stats['Sharpe Ratio'] == stats['Sharpe Ratio'].max()][0]
     res = pc_w[:,max_port] / np.sum(pc_w[:,max_port]) # Normalize to sum to 1
     return res
 
-def weight_eigen(df, cov_estimator=f.sample_cov, **kwargs):
+def weight_eigen(df, cov_estimator=sample_cov, **kwargs):
     rets = (df - df.mean()) / df.std()
     cov_matrix = cov_estimator(rets)
     
     D, S = np.linalg.eigh(cov_matrix)
     
-    stats = f.summary_stats(pd.DataFrame(S),0).sort_values('Sharpe Ratio', ascending=False)
+    stats = summary_stats(pd.DataFrame(S),0).sort_values('Sharpe Ratio', ascending=False)
     max_port = stats.index[stats['Sharpe Ratio'] == stats['Sharpe Ratio'].max()][0]
     res = S[:,max_port] / np.sum(S[:,max_port]) # Normalize to sum to 1
     return res
