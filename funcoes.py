@@ -203,16 +203,16 @@ def summary_stats(r, riskfree_rate=0.03, precision=5):
     hist_cvar5 = r.aggregate(cvar_historic)
     
     return pd.DataFrame({
-        "Annualized Return": round(ann_r,precision),
-        "Annualized Vol": round(ann_vol,precision),
+        "Annualized Return": round(ann_r*100,2),
+        "Annualized Vol": round(ann_vol*100,2),
         "Sharpe Ratio": round(ann_sr,precision),
         "Sortino Ratio": round(ann_so,precision),
-        'Average Drawdown':round(avg_dd,precision),
-        "Max Drawdown": round(max_dd,precision),
+        'Average Drawdown':round(avg_dd*100,2),
+        "Max Drawdown": round(max_dd*100,2),
         "Skewness": round(skew,precision),
         "Kurtosis": round(kurt,precision),
-        "Cornish-Fisher VaR (5%)": round(cf_var5,precision),
-        "Historic CVaR (5%)": round(hist_cvar5,precision),
+        "Cornish-Fisher VaR (5%)": round(cf_var5*100,2),
+        "Historic CVaR (5%)": round(hist_cvar5*100,2),
     })
     
 def tracking_error(r_a, r_b):
@@ -320,11 +320,11 @@ def weight_gmv(r, cov_estimator=sample_cov, **kwargs):
     est_cov = cov_estimator(r, **kwargs)
     return gmv(est_cov)
 
-def msr_weights(returns):
+def msr_weights(returns, cov_estimator=sample_cov):
      # Risk-free rate
 
     mean_returns = annualize_rets(returns)
-    cov_matrix = returns.cov()
+    cov_matrix = cov_estimator(returns)
 
     num_assets = len(mean_returns)
     initial_weights = np.ones(num_assets) / num_assets  # Equal weights to start with
@@ -435,30 +435,20 @@ def weight_erc(r, cov_estimator=sample_cov, **kwargs):
 
 
 def pipeline(df: pd.DataFrame, training_period: int, oos_period: int, algo: str, show_pesos=False, **kwargs):
-    """
-    Receives a returns pandas dataframe
-    Each loop:
-        Split the dataframe in two (training and out of sample)
-        Run training dataframe (train_df) into an algorithm that provides weights for stocks
-        Run these weights for the out of sample dataframe (oos_df)
-    
-    Returns:
-        A dataframe with returns for the portfolio
-    """
-    oos_period = oos_period+1
     retornos = pd.DataFrame()
     for i, month in enumerate(df.index):
         df = df.dropna(axis='columns')
-        if df[(i+training_period) : (i+training_period+oos_period)].shape[0] > oos_period-1:
-            train_df = df[(i) : (i+training_period)].dropna(axis='columns')
+        if df[(i+training_period+1) : (i+training_period+oos_period+2)].shape[0] > oos_period:
+            train_df = df[(i) : (i+training_period+1)].dropna(axis='columns')
             train_df = train_df.pct_change().dropna(axis='rows')
             ## DANGER OF DATA LEAKAGE
-            oos_df = df[(i+training_period) : (i+training_period+oos_period)][train_df.columns].pct_change((oos_period-1)).dropna() 
+            oos_df = df[(i+training_period+1) : (i+training_period+1+oos_period+1)][train_df.columns]
+            oos_df = oos_df.pct_change((oos_period)).dropna() 
+            # DANGER OF DATA LEAKAGE
             
             pesos_algo = algo(train_df)
             pesos_df = pd.DataFrame(data={'pesos':pesos_algo}, index=train_df.columns).sort_values(by='pesos', ascending=False).T
     
-            
             stock_rets = []  
             retorno_mes = []
             for n, date in enumerate(oos_df.index):
