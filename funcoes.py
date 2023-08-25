@@ -320,37 +320,6 @@ def weight_gmv(r, cov_estimator=sample_cov, **kwargs):
     est_cov = cov_estimator(r, **kwargs)
     return gmv(est_cov)
 
-def msr_weights(returns, cov_estimator=sample_cov):
-     # Risk-free rate
-
-    mean_returns = annualize_rets(returns)
-    cov_matrix = cov_estimator(returns)
-
-    num_assets = len(mean_returns)
-    initial_weights = np.ones(num_assets) / num_assets  # Equal weights to start with
-
-    def negative_sharpe(weights):
-        port_return = np.sum(mean_returns * weights)
-        port_stddev = np.sqrt(np.dot(weights.T, np.dot(cov_matrix, weights)))
-        sharpe_ratio = (port_return ) / port_stddev
-        return -sharpe_ratio
-
-    constraints = (
-        {"type": "eq", "fun": lambda weights: np.sum(weights) - 1}  # Sum of weights = 1
-    )
-
-    bounds = tuple((0, .20) for asset in range(num_assets))  # Each weight between 0 and 0.20 (20%)
-
-    optimal_weights = minimize(
-        negative_sharpe,
-        initial_weights,
-        method="SLSQP",
-        bounds=bounds,
-        constraints=constraints
-    ).x
-
-    return optimal_weights
-
 def cc_cov(r, **kwargs):
     """
     Estimates a covariance matrix by using the Elton/Gruber Constant Correlation model
@@ -433,6 +402,66 @@ def weight_erc(r, cov_estimator=sample_cov, **kwargs):
     return equal_risk_contributions(est_cov)
 
 
+"""
+MINHAS FUNÇÕES
+"""  
+def msr_weights(returns, cov_estimator=sample_cov):
+     # Risk-free rate
+
+    mean_returns = annualize_rets(returns)
+    cov_matrix = cov_estimator(returns)
+
+    num_assets = len(mean_returns)
+    initial_weights = np.ones(num_assets) / num_assets  # Equal weights to start with
+
+    def negative_sharpe(weights):
+        port_return = np.sum(mean_returns * weights)
+        port_stddev = np.sqrt(np.dot(weights.T, np.dot(cov_matrix, weights)))
+        sharpe_ratio = (port_return ) / port_stddev
+        return -sharpe_ratio
+
+    constraints = (
+        {"type": "eq", "fun": lambda weights: np.sum(weights) - 1}  # Sum of weights = 1
+    )
+
+    bounds = tuple((0, .20) for asset in range(num_assets))  # Each weight between 0 and 0.20 (20%)
+
+    optimal_weights = minimize(
+        negative_sharpe,
+        initial_weights,
+        method="SLSQP",
+        bounds=bounds,
+        constraints=constraints
+    ).x
+
+    return optimal_weights
+
+
+def weight_pca(df, cov_estimator=f.sample_cov, **kwargs):
+    rets = (df - df.mean()) / df.std()
+    cov_matrix = cov_estimator(rets)
+        
+    pca = PCA()
+    pca_fitted = pca.fit(cov_matrix)
+    
+    pca_comp = pca_fitted.components_;
+    pc_w = pca_comp/ pca_comp.sum()
+    
+    stats = f.summary_stats(pd.DataFrame(pc_w),0).sort_values('Sharpe Ratio', ascending=False)
+    max_port = stats.index[stats['Sharpe Ratio'] == stats['Sharpe Ratio'].max()][0]
+    res = pc_w[:,max_port] / np.sum(pc_w[:,max_port]) # Normalize to sum to 1
+    return res
+
+def weight_eigen(df, cov_estimator=f.sample_cov, **kwargs):
+    rets = (df - df.mean()) / df.std()
+    cov_matrix = cov_estimator(rets)
+    
+    D, S = np.linalg.eigh(cov_matrix)
+    
+    stats = f.summary_stats(pd.DataFrame(S),0).sort_values('Sharpe Ratio', ascending=False)
+    max_port = stats.index[stats['Sharpe Ratio'] == stats['Sharpe Ratio'].max()][0]
+    res = S[:,max_port] / np.sum(S[:,max_port]) # Normalize to sum to 1
+    return res
 
 def pipeline(df: pd.DataFrame, training_period: int, oos_period: int, algo: str, show_pesos=False, **kwargs):
     retornos = pd.DataFrame()
@@ -463,9 +492,7 @@ def pipeline(df: pd.DataFrame, training_period: int, oos_period: int, algo: str,
     return retornos 
 
 
-"""
-MINHAS FUNÇÕES
-"""  
+
 now = dt.datetime.now() 
 start = now - dt.timedelta(days=365*10)
 
