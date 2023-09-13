@@ -221,14 +221,16 @@ def tracking_error(r_a, r_b):
     """
     return np.sqrt(((r_a - r_b)**2).sum())
 
-def msr(riskfree_rate, er, cov):
+def msr(riskfree_rate, er, cov, max_allocation=None):
     """
     Returns the weights of the portfolio that gives you the maximum sharpe ratio
     given the riskfree rate and expected returns and a covariance matrix
     """
     n = er.shape[0]
+    if max_allocation == None:
+        max_allocation = 1/n*10
     init_guess = np.repeat(1/n, n)
-    bounds = ((0.0, 1.0),) * n # an N-tuple of 2-tuples!
+    bounds = ((0.0, max_allocation),) * n # an N-tuple of 2-tuples!
     # construct the constraints
     weights_sum_to_1 = {'type': 'eq',
                         'fun': lambda weights: np.sum(weights) - 1
@@ -379,13 +381,6 @@ def target_risk_contributions(target_risk, cov):
                        bounds=bounds)
     return weights.x
 
-    """
-    Returns the weights of the portfolio that equalizes the contributions
-    of the constituents based on the given covariance matrix
-    """
-    n = cov.shape[0]
-    return target_risk_contributions(target_risk=np.repeat(1/n,n), cov=cov)
-
 def equal_risk_contributions(cov):
     """
     Returns the weights of the portfolio that equalizes the contributions
@@ -405,13 +400,15 @@ def weight_erc(r, cov_estimator=sample_cov, **kwargs):
 """
 MINHAS FUNÇÕES
 """  
-def msr_weights(returns, cov_estimator=sample_cov):
+def weight_msr(returns, max_allocation=None, cov_estimator=sample_cov):
      # Risk-free rate
 
     mean_returns = annualize_rets(returns)
     cov_matrix = cov_estimator(returns)
 
     num_assets = len(mean_returns)
+    if max_allocation == None:
+        max_allocation = 1/num_assets*10
     initial_weights = np.ones(num_assets) / num_assets  # Equal weights to start with
 
     def negative_sharpe(weights):
@@ -424,7 +421,7 @@ def msr_weights(returns, cov_estimator=sample_cov):
         {"type": "eq", "fun": lambda weights: np.sum(weights) - 1}  # Sum of weights = 1
     )
 
-    bounds = tuple((0, .20) for asset in range(num_assets))  # Each weight between 0 and 0.20 (20%)
+    bounds = tuple((0, max_allocation) for asset in range(num_assets))  # Each weight between 0 and 0.20 (20%)
 
     optimal_weights = minimize(
         negative_sharpe,
@@ -475,7 +472,7 @@ def pipeline(df: pd.DataFrame, training_period: int, oos_period: int, algo: str,
             oos_df = oos_df.pct_change((oos_period)).dropna() 
             # DANGER OF DATA LEAKAGE
             
-            pesos_algo = algo(train_df)
+            pesos_algo = algo(train_df, **kwargs)
             pesos_df = pd.DataFrame(data={'pesos':pesos_algo}, index=train_df.columns).sort_values(by='pesos', ascending=False).T
     
             stock_rets = []  
@@ -516,8 +513,8 @@ def download_portfolio(tickers: list, cols="Adj Close", interval='1mo', start=st
         
     return portfolio[cols]
 
-def returns(prices):
-    return prices.pct_change(1)#.dropna(axis='rows')
+def returns(prices, window=1):
+    return prices.pct_change(window)[1:]
     
 def plot_dd(returns):
     drawdown(returns)[['Wealth', 'Peaks']].plot(figsize=(12,5))
