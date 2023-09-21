@@ -187,6 +187,17 @@ def sortino_ratio(returns, riskfree_rate, target_return=0, periods_per_year=12):
     sortino_ratio = (average_return - riskfree_rate) / downside_deviation
     return sortino_ratio
 
+def adjusted_sharpe_ratio(r, riskfree_rate=0.03, periods_per_year=12):
+    """
+    indice de sharpe ajustado, leva em consideração o tail-risk
+    incluindo na equação a skewness e a curtose
+    https://papers.ssrn.com/sol3/papers.cfm?abstract_id=3284396
+    """
+    sr = sharpe_ratio(r, riskfree_rate, periods_per_year)
+    kurt = kurtosis(r) 
+    skew = skewness(r)
+    return (sr * (1+ skew/6 * sr - (kurt-3)/24 * sr**2))
+
 def summary_stats(r, riskfree_rate=0.03, precision=5):
     """
     Return a DataFrame that contains aggregated summary stats for the returns in the columns of r
@@ -201,11 +212,13 @@ def summary_stats(r, riskfree_rate=0.03, precision=5):
     kurt = r.aggregate(kurtosis)
     cf_var5 = r.aggregate(var_gaussian, modified=True)
     hist_cvar5 = r.aggregate(cvar_historic)
+    adj_sr = r.aggregate(adjusted_sharpe_ratio, riskfree_rate=riskfree_rate, periods_per_year=12)
     
     return pd.DataFrame({
         "Annualized Return": round(ann_r*100,2),
         "Annualized Vol": round(ann_vol*100,2),
         "Sharpe Ratio": round(ann_sr,precision),
+        "Adjusted Sharpe Ratio": round(adj_sr, precision),
         "Sortino Ratio": round(ann_so,precision),
         'Average Drawdown':round(avg_dd*100,2),
         "Max Drawdown": round(max_dd*100,2),
@@ -523,11 +536,14 @@ def underwater_plot(returns, figsize=(12,5)):
     drawdown(returns)['Drawdown'].plot(figsize=figsize)
 
 from bcb import sgs
-def get_selic(start_date='2000-01-01', end_date='2022-12-31'):
-    # Busca a série da SELIC no SGS
-    selic = sgs.get({'selic':4390}, start = start_date, end=end_date) 
-    selic = selic.to_period('M')
-    return selic / 100
+def get_taxa_juros(start_date='2000-01-01', end_date='2022-12-31', indicador: int = 4391,) -> int:
+    """
+    Busca a série histórica da taxa de juros no Sistema de Gestão de Séries 
+    4390 = SELIC mensal
+    4391 = CDI Mensal
+    """
+    rfr = sgs.get({'rfr':indicador}, start = start_date, end=end_date)
+    return (rfr / 100)
 
 def plot_rets_distribuition(r, benchmark=None, density_size=10, figsize=(20,8)):
     plt.figure(figsize=figsize)
