@@ -198,14 +198,14 @@ def adjusted_sharpe_ratio(r, riskfree_rate=0.03, periods_per_year=12):
     skew = skewness(r)
     return (sr * (1+ skew/6 * sr - (kurt-3)/24 * sr**2))
 
-def summary_stats(r, riskfree_rate=0.03, precision=5):
+def summary_stats(r, riskfree_rate=0.03, periods_per_year=12, precision=5):
     """
     Return a DataFrame that contains aggregated summary stats for the returns in the columns of r
     """
-    ann_r = r.aggregate(annualize_rets, periods_per_year=12)
-    ann_vol = r.aggregate(annualize_vol, periods_per_year=12)
-    ann_sr = r.aggregate(sharpe_ratio, riskfree_rate=riskfree_rate, periods_per_year=12)
-    ann_so = r.aggregate(sortino_ratio, riskfree_rate=riskfree_rate, periods_per_year=12)
+    ann_r = r.aggregate(annualize_rets, periods_per_year=periods_per_year)
+    ann_vol = r.aggregate(annualize_vol, periods_per_year=periods_per_year)
+    ann_sr = r.aggregate(sharpe_ratio, riskfree_rate=riskfree_rate, periods_per_year=periods_per_year)
+    ann_so = r.aggregate(sortino_ratio, riskfree_rate=riskfree_rate, periods_per_year=periods_per_year)
     max_dd = r.aggregate(lambda r: drawdown(r).Drawdown.min())
     avg_dd = r.aggregate(lambda r: drawdown(r).Drawdown.mean())
     skew = r.aggregate(skewness)
@@ -298,13 +298,6 @@ def weight_ew(r, cap_weights=None, max_cw_mult=None, microcap_threshold=None, **
             ew = np.minimum(ew, cw*max_cw_mult)
             ew = ew/ew.sum() #reweight
     return ew
-
-def weight_cw(r, cap_weights, **kwargs):
-    """
-    Returns the weights of the CW portfolio based on the time series of capweights
-    """
-    w = cap_weights.loc[r.index[1]]
-    return w/w.sum()
 
 def backtest_ws(r, estimation_window=60, weighting=weight_ew, verbose=False, **kwargs):
     """
@@ -473,33 +466,44 @@ def weight_eigen(df, cov_estimator=sample_cov, **kwargs):
     res = S[:,max_port] / np.sum(S[:,max_port]) # Normalize to sum to 1
     return res
 
-def pipeline(df: pd.DataFrame, training_period: int, oos_period: int, algo: str, show_pesos=False, **kwargs):
+def pipeline(df: pd.DataFrame, training_period: int=60, oos_period: int=3, algo: str=weight_ew, show_pesos=False, **kwargs):
     retornos = pd.DataFrame()
     for i, month in enumerate(df.index):
-        df = df.dropna(axis='columns')
-        if df[(i+training_period+1) : (i+training_period+oos_period+2)].shape[0] > oos_period:
-            train_df = df[(i) : (i+training_period+1)].dropna(axis='columns')
-            train_df = train_df.pct_change().dropna(axis='rows')
-            ## DANGER OF DATA LEAKAGE
-            oos_df = df[(i+training_period+1) : (i+training_period+1+oos_period+1)][train_df.columns]
-            oos_df = oos_df.pct_change((oos_period)).dropna() 
-            # DANGER OF DATA LEAKAGE
-            
-            pesos_algo = algo(train_df, **kwargs)
-            pesos_df = pd.DataFrame(data={'pesos':pesos_algo}, index=train_df.columns).sort_values(by='pesos', ascending=False).T
-    
-            stock_rets = []  
-            retorno_mes = []
-            for n, date in enumerate(oos_df.index):
-                for stock in oos_df.columns:
-                    stock_rets.append(oos_df[stock][n] * pesos_df[stock][n])
-
-                retorno_mes.append(sum(stock_rets))
-                retornos[date] = retorno_mes
-                
+        # print(i, oos_period, i%oos_period)
+        if i % oos_period != 0:
+            pass
+        else:
+            # df = df.dropna(axis='columns')
+            pesos = pd.DataFrame(columns=df.columns)
+            if df[(i+training_period+1) : (i+training_period+oos_period+2)].shape[0] > oos_period:
+                    train_df = df[(i) : (i+training_period+1)].dropna(axis='columns') ## ultimo não incluse 
+                    train_df = train_df.pct_change().dropna(axis='rows')
+                    
+                    ## BE AWARE OF POSSIBLE DATA LEAKAGE HERE 
+                    oos_df = df[(i+training_period+1) : (i+training_period+1+oos_period+1)][train_df.columns]
+                    oos_df = oos_df.pct_change(oos_period).dropna() 
+                    ## BE AWARE OF POSSIBLE DATA LEAKAGE HERE
+                    
+                    # print(oos_df.iloc[:,:5])
+                    
+                    pesos_algo = algo(train_df, **kwargs)
+                    pesos_df = pd.DataFrame(data={'pesos':pesos_algo}, index=train_df.columns).sort_values(by='pesos', ascending=False).T
+                                        
+                    stock_rets = []  
+                    retorno_mes = []
+                    for n, date in enumerate(oos_df.index):
+                        for stock in oos_df.columns:
+                            stock_rets.append(oos_df[stock][n] * pesos_df[stock][n])
+                        retorno_mes.append(sum(stock_rets))
+                        retornos[date] = retorno_mes
+                    
     retornos = retornos.T 
     retornos.rename(columns={0:'rets'}, inplace=True)
-    return retornos 
+    
+    if show_pesos:
+        return retornos, pesos_df
+    else:
+        return retornos
 
 
 
